@@ -1,21 +1,51 @@
-from tradingagents.graph.trading_graph import TradingAgentsGraph
-from tradingagents.default_config import DEFAULT_CONFIG
+"""Entrypoint for the TradingAgents automated scheduler."""
 
-# Create a custom config
-config = DEFAULT_CONFIG.copy()
-config["llm_provider"] = "google"  # Use a different model
-config["backend_url"] = "https://generativelanguage.googleapis.com/v1"  # Use a different backend
-config["deep_think_llm"] = "gemini-2.0-flash"  # Use a different model
-config["quick_think_llm"] = "gemini-2.0-flash"  # Use a different model
-config["max_debate_rounds"] = 1  # Increase debate rounds
-config["online_tools"] = True  # Increase debate rounds
+from __future__ import annotations
 
-# Initialize with custom config
-ta = TradingAgentsGraph(debug=True, config=config)
+import logging
+import os
 
-# forward propagate
-_, decision = ta.propagate("NVDA", "2024-05-10")
-print(decision)
+from dotenv import load_dotenv
 
-# Memorize mistakes and reflect
-# ta.reflect_and_remember(1000) # parameter is the position returns
+
+def _configure_logging() -> None:
+	log_level = os.getenv("TRADINGAGENTS_LOG_LEVEL", "INFO").upper()
+	logging.basicConfig(
+		level=getattr(logging, log_level, logging.INFO),
+		format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
+	)
+
+
+def main() -> None:
+	load_dotenv()
+	_configure_logging()
+
+	# Import lazily so that environment variables from .env are available.
+	from tradingagents.default_config import DEFAULT_CONFIG
+	from tradingagents.scheduler import TradingAgentsScheduler
+
+	debug_mode = os.getenv("TRADINGAGENTS_DEBUG", "false").lower() in {
+		"true",
+		"1",
+		"yes",
+		"on",
+	}
+	timezone = os.getenv("TRADINGAGENTS_TIMEZONE")
+
+	try:
+		scheduler = TradingAgentsScheduler(
+			config=DEFAULT_CONFIG.copy(),
+			timezone=timezone,
+			debug=debug_mode,
+		)
+	except ValueError as exc:
+		logging.error(
+			"No se pudo iniciar el scheduler porque falta configuración: %s", exc
+		)
+		raise
+
+	scheduler.run_forever()
+
+
+if __name__ == "__main__":
+	main()

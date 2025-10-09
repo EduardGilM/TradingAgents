@@ -192,6 +192,54 @@ print(decision)
 
 You can view the full list of configurations in `tradingagents/default_config.py`.
 
+### Automated Scheduler
+
+The root `main.py` file now launches an automated scheduler that keeps the
+framework running indefinitely and executes analyses for the configured tickers
+at the times you define.
+
+#### 1. Configure environment variables
+
+Create a `.env` file (or export the variables in your environment) with at
+least the schedule definition:
+
+```
+TRADINGAGENTS_SCHEDULE_TIMES=09:00,15:30
+TRADINGAGENTS_TICKERS="CL=F,EURUSD=X"
+TRADINGAGENTS_TIMEZONE=Europe/Madrid
+
+# Optional email notification (set to false to disable)
+TRADINGAGENTS_EMAIL_ENABLED=true
+TRADINGAGENTS_EMAIL_HOST=smtp.yourprovider.com
+TRADINGAGENTS_EMAIL_PORT=587
+TRADINGAGENTS_EMAIL_USERNAME=your_user
+TRADINGAGENTS_EMAIL_PASSWORD=your_password
+TRADINGAGENTS_EMAIL_FROM=alerts@example.com
+TRADINGAGENTS_EMAIL_TO=recipient1@example.com,recipient2@example.com
+
+# Optional WhatsApp notification via WhatsApp Cloud API
+TRADINGAGENTS_WHATSAPP_ENABLED=true
+TRADINGAGENTS_WHATSAPP_ACCESS_TOKEN=EAAG...        # Token de acceso de la app de Meta
+TRADINGAGENTS_WHATSAPP_PHONE_NUMBER_ID=1234567890  # ID del número en WhatsApp Business
+TRADINGAGENTS_WHATSAPP_TO=+34123456789,+34698765432
+```
+
+The scheduler lee estos valores al arrancar.
+- Si `TRADINGAGENTS_EMAIL_ENABLED=true`, enviará un correo tras cada lote.
+- Si `TRADINGAGENTS_WHATSAPP_ENABLED=true`, enviará un resumen por WhatsApp usando la API oficial de Meta (WhatsApp Cloud API). Recuerda mantener el token actualizado, verificar los destinatarios y usar números en formato internacional con prefijo `+`.
+
+#### 2. Launch the scheduler
+
+Run the entry point and keep it running:
+
+```bash
+python main.py
+```
+
+TradingAgents will stay active, execute the three tickers at each scheduled
+time, print the results to the console, persist the reports under
+`./results/<ticker>/<date>/<time>/`, and email the summary when enabled.
+
 ## Contributing
 
 We welcome contributions from the community! Whether it's fixing a bug, improving documentation, or suggesting a new feature, your input helps make this project better. If you are interested in this line of research, please consider joining our open-source financial AI research community [Tauric Research](https://tauric.ai/).
