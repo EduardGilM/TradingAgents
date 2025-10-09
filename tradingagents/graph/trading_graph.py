@@ -20,21 +20,7 @@ from tradingagents.agents.utils.agent_states import (
     InvestDebateState,
     RiskDebateState,
 )
-from tradingagents.dataflows.config import set_config
-
-# Import the new abstract tool methods from agent_utils
-from tradingagents.agents.utils.agent_utils import (
-    get_stock_data,
-    get_indicators,
-    get_fundamentals,
-    get_balance_sheet,
-    get_cashflow,
-    get_income_statement,
-    get_news,
-    get_insider_sentiment,
-    get_insider_transactions,
-    get_global_news
-)
+from tradingagents.dataflows.interface import set_config
 
 from .conditional_logic import ConditionalLogic
 from .setup import GraphSetup
@@ -84,6 +70,8 @@ class TradingAgentsGraph:
         else:
             raise ValueError(f"Unsupported LLM provider: {self.config['llm_provider']}")
         
+        self.toolkit = Toolkit(config=self.config)
+
         # Initialize memories
         self.bull_memory = FinancialSituationMemory("bull_memory", self.config)
         self.bear_memory = FinancialSituationMemory("bear_memory", self.config)
@@ -99,6 +87,7 @@ class TradingAgentsGraph:
         self.graph_setup = GraphSetup(
             self.quick_thinking_llm,
             self.deep_thinking_llm,
+            self.toolkit,
             self.tool_nodes,
             self.bull_memory,
             self.bear_memory,
@@ -121,38 +110,46 @@ class TradingAgentsGraph:
         self.graph = self.graph_setup.setup_graph(selected_analysts)
 
     def _create_tool_nodes(self) -> Dict[str, ToolNode]:
-        """Create tool nodes for different data sources using abstract methods."""
+        """Create tool nodes for different data sources."""
         return {
             "market": ToolNode(
                 [
-                    # Core stock data tools
-                    get_stock_data,
-                    # Technical indicators
-                    get_indicators,
+                    # online tools
+                    self.toolkit.get_YFin_data_online,
+                    self.toolkit.get_stockstats_indicators_report_online,
+                    # offline tools
+                    self.toolkit.get_YFin_data,
+                    self.toolkit.get_stockstats_indicators_report,
                 ]
             ),
             "social": ToolNode(
                 [
-                    # News tools for social media analysis
-                    get_news,
+                    # online tools
+                    self.toolkit.get_stock_news_openai,
+                    # offline tools
+                    self.toolkit.get_reddit_stock_info,
                 ]
             ),
             "news": ToolNode(
                 [
-                    # News and insider information
-                    get_news,
-                    get_global_news,
-                    get_insider_sentiment,
-                    get_insider_transactions,
+                    # online tools
+                    self.toolkit.get_global_news_openai,
+                    self.toolkit.get_google_news,
+                    # offline tools
+                    self.toolkit.get_finnhub_news,
+                    self.toolkit.get_reddit_news,
                 ]
             ),
             "fundamentals": ToolNode(
                 [
-                    # Fundamental analysis tools
-                    get_fundamentals,
-                    get_balance_sheet,
-                    get_cashflow,
-                    get_income_statement,
+                    # online tools
+                    self.toolkit.get_fundamentals_openai,
+                    # offline tools
+                    self.toolkit.get_finnhub_company_insider_sentiment,
+                    self.toolkit.get_finnhub_company_insider_transactions,
+                    self.toolkit.get_simfin_balance_sheet,
+                    self.toolkit.get_simfin_cashflow,
+                    self.toolkit.get_simfin_income_stmt,
                 ]
             ),
         }
