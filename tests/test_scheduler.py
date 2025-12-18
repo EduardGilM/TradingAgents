@@ -25,6 +25,24 @@ class SchedulerUtilsTest(unittest.TestCase):
         next_run = next_run_after(now, run_time, tz)
         self.assertEqual(next_run, tz.localize(datetime(2025, 10, 1, 9, 30)))
 
+    def test_next_run_after_skip_weekend_friday(self):
+        tz = pytz.timezone("Europe/Madrid")
+        # Friday 2025-09-19 20:00
+        now = tz.localize(datetime(2025, 9, 19, 20, 0))
+        run_time = time(9, 30)
+        # Should skip Saturday and Sunday and land on Monday 22nd
+        next_run = next_run_after(now, run_time, tz, skip_weekends=True)
+        self.assertEqual(next_run, tz.localize(datetime(2025, 9, 22, 9, 30)))
+
+    def test_next_run_after_skip_weekend_saturday(self):
+        tz = pytz.timezone("Europe/Madrid")
+        # Saturday 2025-09-20 10:00
+        now = tz.localize(datetime(2025, 9, 20, 10, 0))
+        run_time = time(9, 30)
+        # Should skip to Monday 22nd
+        next_run = next_run_after(now, run_time, tz, skip_weekends=True)
+        self.assertEqual(next_run, tz.localize(datetime(2025, 9, 22, 9, 30)))
+
 
 if __name__ == "__main__":
     unittest.main()

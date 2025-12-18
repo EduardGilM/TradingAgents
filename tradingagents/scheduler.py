@@ -69,12 +69,18 @@ def parse_schedule_times(times_config: Optional[str]) -> List[dtime]:
     return sorted(schedule)
 
 
-def next_run_after(now: datetime, run_time: dtime, tz: tzinfo) -> datetime:
+def next_run_after(now: datetime, run_time: dtime, tz: tzinfo, skip_weekends: bool = False) -> datetime:
     """Return the next datetime at which ``run_time`` should execute."""
 
     candidate = tz.localize(datetime.combine(now.date(), run_time))
     if candidate <= now:
         candidate += timedelta(days=1)
+
+    if skip_weekends:
+        # 0=Monday, 1=Tuesday, ..., 4=Friday, 5=Saturday, 6=Sunday
+        while candidate.weekday() >= 5:
+            candidate += timedelta(days=1)
+
     return candidate
 
 
@@ -447,6 +453,16 @@ class TradingAgentsScheduler:
         self.selected_analysts = list(cfg_analysts)
         self.email_config = _gather_email_config(self.config)
         self.whatsapp_config = _gather_whatsapp_config(self.config)
+        self.skip_weekends = (
+            self.config.get("schedule", {}).get("skip_weekends")
+            if isinstance(self.config.get("schedule"), dict)
+            else False
+        ) or os.getenv("TRADINGAGENTS_SKIP_WEEKENDS", "false").lower() in {
+            "true",
+            "1",
+            "yes",
+            "on",
+        }
 
         if not self.schedule_times:
             raise ValueError(
@@ -495,7 +511,10 @@ class TradingAgentsScheduler:
 
     def run_pending(self) -> None:
         now = datetime.now(self.timezone)
-        next_runs = [next_run_after(now, t, self.timezone) for t in self.schedule_times]
+        next_runs = [
+            next_run_after(now, t, self.timezone, skip_weekends=self.skip_weekends)
+            for t in self.schedule_times
+        ]
         next_run = min(next_runs)
         sleep_seconds = max(0, (next_run - now).total_seconds())
         LOGGER.info("Próxima ejecución programada para %s", next_run.isoformat())

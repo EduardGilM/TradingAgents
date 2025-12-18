@@ -36,6 +36,7 @@ DEFAULT_CONFIG = {
     "schedule": {
         "times": os.getenv("TRADINGAGENTS_SCHEDULE_TIMES"),
         "timezone": os.getenv("TRADINGAGENTS_TIMEZONE", "Europe/Madrid"),
+        "skip_weekends": os.getenv("TRADINGAGENTS_SKIP_WEEKENDS", "false").lower() in {"true", "1", "yes", "on"},
     },
     "tickers": os.getenv(
         "TRADINGAGENTS_TICKERS",
