@@ -473,13 +473,30 @@ class TradingAgentsScheduler:
     def _run_single_ticker(self, ticker: str, run_time: datetime) -> RunResult:
         config = self.config.copy()
         try:
+            # ACE settings from config
+            ace_enabled = config.get("ace_enabled", True)
+            ace_skillbook_path = config.get("ace_skillbook_path") or str(
+                Path(config["results_dir"]) / "ace_skillbook.json"
+            )
+            
             graph = TradingAgentsGraph(
                 selected_analysts=self.selected_analysts,
                 config=config,
                 debug=self.debug,
+                ace_enabled=ace_enabled,
+                ace_skillbook_path=ace_skillbook_path,
             )
             analysis_date = run_time.strftime("%Y-%m-%d")
             final_state, decision = graph.propagate(ticker, analysis_date)
+            
+            # Trigger ACE learning from analysis
+            if ace_enabled and graph.ace_engine:
+                try:
+                    LOGGER.info("ACE: Triggering analytical reflection for %s", ticker)
+                    graph._ace_learn_from_analysis()
+                except Exception as ace_learn_exc:
+                    LOGGER.warning("ACE learning failed for %s: %s", ticker, ace_learn_exc)
+
             report_dir, report_md = _write_outputs(
                 ticker=ticker,
                 run_time=run_time,
@@ -487,6 +504,15 @@ class TradingAgentsScheduler:
                 final_state=final_state,
                 decision=decision,
             )
+            
+            # Save ACE skillbook after execution (persists learned strategies)
+            if ace_enabled and graph.ace_engine:
+                try:
+                    graph.save_ace_skillbook()
+                    LOGGER.info("ACE skillbook saved to %s", ace_skillbook_path)
+                except Exception as ace_exc:
+                    LOGGER.warning("Failed to save ACE skillbook: %s", ace_exc)
+            
             return RunResult(
                 ticker=ticker,
                 analysis_date=analysis_date,

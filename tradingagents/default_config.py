@@ -58,4 +58,9 @@ DEFAULT_CONFIG = {
         "phone_number_id": os.getenv("TRADINGAGENTS_WHATSAPP_PHONE_NUMBER_ID"),
         "to": os.getenv("TRADINGAGENTS_WHATSAPP_TO"),
     },
+    # ACE (Agentic Context Engineering) settings
+    "ace_enabled": os.getenv("TRADINGAGENTS_ACE_ENABLED", "true").lower() in {"true", "1", "yes", "on"},
+    "ace_skillbook_path": os.getenv("TRADINGAGENTS_ACE_SKILLBOOK_PATH"),
+    "ace_max_skills": int(os.getenv("TRADINGAGENTS_ACE_MAX_SKILLS", 15)),
+    "ace_learning": os.getenv("TRADINGAGENTS_ACE_LEARNING", "true").lower() in {"true", "1", "yes", "on"},
 }
