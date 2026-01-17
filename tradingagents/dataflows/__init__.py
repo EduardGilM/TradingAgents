@@ -12,7 +12,6 @@ from .interface import (
     get_finnhub_company_insider_transactions,
     get_google_news,
     get_reddit_global_news,
-    get_reddit_company_news,
     # Financial statements functions
     get_simfin_balance_sheet,
     get_simfin_cashflow,
@@ -32,7 +31,6 @@ __all__ = [
     "get_finnhub_company_insider_transactions",
     "get_google_news",
     "get_reddit_global_news",
-    "get_reddit_company_news",
     # Financial statements functions
     "get_simfin_balance_sheet",
     "get_simfin_cashflow",
