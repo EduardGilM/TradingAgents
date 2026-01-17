@@ -355,64 +355,73 @@ def get_reddit_global_news(
         if post["content"] == "":
             news_str += f"### {post['title']}\n\n"
         else:
-            news_str += f"### {post['title']}\n\n{post['content']}\n\n"
+            vendor_methods = [(vendor_impl, vendor)]
 
-    return f"## Global News Reddit, from {before} to {curr_date}:\n{news_str}"
+        # Run methods for this vendor with retry logic
+        vendor_results = []
+        for impl_func, vendor_name in vendor_methods:
+            max_retries = 3
+            base_delay = 1.0
+            last_error = None
 
+            for retry_attempt in range(max_retries):
+                try:
+                    if retry_attempt > 0:
+                        print(f"RETRY: Attempt {retry_attempt + 1}/{max_retries} "
+                              f"for {impl_func.__name__}")
+                    else:
+                        print(f"DEBUG: Calling {impl_func.__name__} "
+                              f"from vendor '{vendor_name}'...")
 
-def get_reddit_company_news(
-    ticker: Annotated[str, "ticker symbol of the company"],
-    start_date: Annotated[str, "Start date in yyyy-mm-dd format"],
-    look_back_days: Annotated[int, "how many days to look back"],
-    max_limit_per_day: Annotated[int, "Maximum number of news per day"],
-) -> str:
-    """
-    Retrieve the latest top reddit news
-    Args:
-        ticker: ticker symbol of the company
-        start_date: Start date in yyyy-mm-dd format
-        end_date: End date in yyyy-mm-dd format
-    Returns:
-        str: A formatted dataframe containing the latest news articles posts on reddit and meta information in these columns: "created_utc", "id", "title", "selftext", "score", "num_comments", "url"
-    """
+                    result = impl_func(*args, **kwargs)
+                    vendor_results.append(result)
+                    print(f"SUCCESS: {impl_func.__name__} from vendor "
+                          f"'{vendor_name}' completed successfully")
+                    last_error = None
+                    break  # Success, exit retry loop
 
-    start_date = datetime.strptime(start_date, "%Y-%m-%d")
-    before = start_date - relativedelta(days=look_back_days)
-    before = before.strftime("%Y-%m-%d")
+                except AlphaVantageRateLimitError as e:
+                    print(f"RATE_LIMIT: Alpha Vantage rate limit exceeded")
+                    print(f"DEBUG: Rate limit details: {e}")
+                    last_error = e
+                    break  # Don't retry rate limits, move to next vendor
 
-    posts = []
-    # iterate from start_date to end_date
-    curr_date = datetime.strptime(before, "%Y-%m-%d")
+                except (ConnectionError, TimeoutError, OSError,
+                        APIConnectionError, APITimeoutError, RateLimitError) as e:
+                    # Transient errors - retry with backoff
+                    last_error = e
+                    if retry_attempt < max_retries - 1:
+                        delay = base_delay * (2 ** retry_attempt)
+                        print(f"TRANSIENT_ERROR: {type(e).__name__} - {e}")
+                        print(f"RETRY: Waiting {delay}s before retry...")
+                        time.sleep(delay)
+                    else:
+                        print(f"FAILED: {impl_func.__name__} from vendor "
+                              f"'{vendor_name}' failed after {max_retries} "
+                              f"attempts: {e}")
 
-    total_iterations = (start_date - curr_date).days + 1
-    pbar = tqdm(
-        desc=f"Getting Company News for {ticker} on {start_date}",
-        total=total_iterations,
-    )
+                except Exception as e:
+                    # Non-transient errors - don't retry
+                    last_error = e
+                    print(f"FAILED: {impl_func.__name__} from vendor "
+                          f"'{vendor_name}' failed: {type(e).__name__}: {e}")
+                    break
 
-    while curr_date <= start_date:
-        curr_date_str = curr_date.strftime("%Y-%m-%d")
-        fetch_result = fetch_top_from_category(
-            "company_news",
-            curr_date_str,
-            max_limit_per_day,
-            ticker,
-            data_path=os.path.join(DATA_DIR, "reddit_data"),
-        )
-        posts.extend(fetch_result)
-        curr_date += relativedelta(days=1)
+            if last_error is not None:
+                continue  # Move to next implementation
 
-        pbar.update(1)
-
-    pbar.close()
-
-    if len(posts) == 0:
-        return ""
-
-    news_str = ""
-    for post in posts:
-        if post["content"] == "":
-            news_str += f"### {post['title']}\n\n"
+        # Add this vendor's results
+        if vendor_results:
+            results.extend(vendor_results)
+            successful_vendor = vendor
+            result_summary = f"Got {len(vendor_results)} result(s)"
+            print(f"SUCCESS: Vendor '{vendor}' succeeded - {result_summary}")
+            
+            # Stopping logic: Stop after first successful vendor for single-vendor configs
+            # Multiple vendor configs (comma-separated) may want to collect from multiple sources
+            if len(primary_vendors) == 1:
+                print(f"DEBUG: Stopping after successful vendor '{vendor}' (single-vendor config)")
+                break
         else:
             news_str += f"### {post['title']}\n\n{post['content']}\n\n"
 
