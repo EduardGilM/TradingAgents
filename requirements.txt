@@ -24,5 +24,7 @@ rich
 questionary
 langchain_anthropic
 langchain-google-genai
+playwright
+markdown2
 python-dotenv
 ace-framework
