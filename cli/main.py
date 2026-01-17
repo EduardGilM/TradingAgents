@@ -474,20 +474,13 @@ def get_user_selections():
     )
     selected_llm_provider, backend_url = select_llm_provider()
     
-    # Step 6: Quick-Thinking LLM Engine
+    # Step 6: Thinking agents
     console.print(
         create_question_box(
-            "Step 6: Quick-Thinking LLM Engine", "Select your quick-thinking model for fast operations"
+            "Step 6: Thinking Agents", "Select your thinking agents for analysis"
         )
     )
     selected_shallow_thinker = select_shallow_thinking_agent(selected_llm_provider)
-
-    # Step 7: Deep-Thinking LLM Engine
-    console.print(
-        create_question_box(
-            "Step 7: Deep-Thinking LLM Engine", "Select your deep-thinking model for complex reasoning"
-        )
-    )
     selected_deep_thinker = select_deep_thinking_agent(selected_llm_provider)
 
     return {

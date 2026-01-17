@@ -1,180 +1,53 @@
-from typing import Annotated
-import time
+from typing import Annotated, Dict
+from .reddit_utils import fetch_top_from_category
+from .yfin_utils import *
+from .stockstats_utils import *
+from .googlenews_utils import *
+from .finnhub_utils import get_data_in_range
+from dateutil.relativedelta import relativedelta
+from concurrent.futures import ThreadPoolExecutor
+from datetime import datetime
+import json
+import os
+import pandas as pd
+from tqdm import tqdm
+import yfinance as yf
+from openai import OpenAI
+from .config import get_config, set_config, DATA_DIR
 
-# Import from vendor-specific modules
-from .local import get_YFin_data, get_finnhub_news, get_finnhub_company_insider_sentiment, get_finnhub_company_insider_transactions, get_simfin_balance_sheet, get_simfin_cashflow, get_simfin_income_statements, get_reddit_global_news, get_reddit_company_news
-from .y_finance import get_YFin_data_online, get_stock_stats_indicators_window, get_balance_sheet as get_yfinance_balance_sheet, get_cashflow as get_yfinance_cashflow, get_income_statement as get_yfinance_income_statement, get_insider_transactions as get_yfinance_insider_transactions
-from .google import get_google_news
-from .openai import get_stock_news_openai, get_global_news_openai, get_fundamentals_openai
-from .alpha_vantage import (
-    get_stock as get_alpha_vantage_stock,
-    get_indicator as get_alpha_vantage_indicator,
-    get_fundamentals as get_alpha_vantage_fundamentals,
-    get_balance_sheet as get_alpha_vantage_balance_sheet,
-    get_cashflow as get_alpha_vantage_cashflow,
-    get_income_statement as get_alpha_vantage_income_statement,
-    get_insider_transactions as get_alpha_vantage_insider_transactions,
-    get_news as get_alpha_vantage_news
-)
-from .alpha_vantage_common import AlphaVantageRateLimitError
-from openai import APIConnectionError, APITimeoutError, RateLimitError
 
-# Configuration and routing logic
-from .config import get_config
-
-# Tools organized by category
-TOOLS_CATEGORIES = {
-    "core_stock_apis": {
-        "description": "OHLCV stock price data",
-        "tools": [
-            "get_stock_data"
-        ]
-    },
-    "technical_indicators": {
-        "description": "Technical analysis indicators",
-        "tools": [
-            "get_indicators"
-        ]
-    },
-    "fundamental_data": {
-        "description": "Company fundamentals",
-        "tools": [
-            "get_fundamentals",
-            "get_balance_sheet",
-            "get_cashflow",
-            "get_income_statement"
-        ]
-    },
-    "news_data": {
-        "description": "News (public/insiders, original/processed)",
-        "tools": [
-            "get_news",
-            "get_global_news",
-            "get_insider_sentiment",
-            "get_insider_transactions",
-        ]
-    }
-}
-
-VENDOR_LIST = [
-    "local",
-    "yfinance",
-    "openai",
-    "google"
-]
-
-# Mapping of methods to their vendor-specific implementations
-VENDOR_METHODS = {
-    # core_stock_apis
-    "get_stock_data": {
-        "alpha_vantage": get_alpha_vantage_stock,
-        "yfinance": get_YFin_data_online,
-        "local": get_YFin_data,
-    },
-    # technical_indicators
-    "get_indicators": {
-        "alpha_vantage": get_alpha_vantage_indicator,
-        "yfinance": get_stock_stats_indicators_window,
-        "local": get_stock_stats_indicators_window
-    },
-    # fundamental_data
-    "get_fundamentals": {
-        "alpha_vantage": get_alpha_vantage_fundamentals,
-        "openai": get_fundamentals_openai,
-    },
-    "get_balance_sheet": {
-        "alpha_vantage": get_alpha_vantage_balance_sheet,
-        "yfinance": get_yfinance_balance_sheet,
-        "local": get_simfin_balance_sheet,
-    },
-    "get_cashflow": {
-        "alpha_vantage": get_alpha_vantage_cashflow,
-        "yfinance": get_yfinance_cashflow,
-        "local": get_simfin_cashflow,
-    },
-    "get_income_statement": {
-        "alpha_vantage": get_alpha_vantage_income_statement,
-        "yfinance": get_yfinance_income_statement,
-        "local": get_simfin_income_statements,
-    },
-    # news_data
-    "get_news": {
-        "alpha_vantage": get_alpha_vantage_news,
-        "openai": get_stock_news_openai,
-        "google": get_google_news,
-        "local": [get_finnhub_news, get_reddit_company_news, get_google_news],
-    },
-    "get_global_news": {
-        "openai": get_global_news_openai,
-        "local": get_reddit_global_news
-    },
-    "get_insider_sentiment": {
-        "local": get_finnhub_company_insider_sentiment
-    },
-    "get_insider_transactions": {
-        "alpha_vantage": get_alpha_vantage_insider_transactions,
-        "yfinance": get_yfinance_insider_transactions,
-        "local": get_finnhub_company_insider_transactions,
-    },
-}
-
-def get_category_for_method(method: str) -> str:
-    """Get the category that contains the specified method."""
-    for category, info in TOOLS_CATEGORIES.items():
-        if method in info["tools"]:
-            return category
-    raise ValueError(f"Method '{method}' not found in any category")
-
-def get_vendor(category: str, method: str = None) -> str:
-    """Get the configured vendor for a data category or specific tool method.
-    Tool-level configuration takes precedence over category-level.
+def get_finnhub_news(
+    ticker: Annotated[
+        str,
+        "Search query of a company's, e.g. 'AAPL, TSM, etc.",
+    ],
+    curr_date: Annotated[str, "Current date in yyyy-mm-dd format"],
+    look_back_days: Annotated[int, "how many days to look back"],
+):
     """
-    config = get_config()
+    Retrieve news about a company within a time frame
 
-    # Check tool-level configuration first (if method provided)
-    if method:
-        tool_vendors = config.get("tool_vendors", {})
-        if method in tool_vendors:
-            return tool_vendors[method]
+    Args
+        ticker (str): ticker for the company you are interested in
+        start_date (str): Start date in yyyy-mm-dd format
+        end_date (str): End date in yyyy-mm-dd format
+    Returns
+        str: dataframe containing the news of the company in the time frame
 
-    # Fall back to category-level configuration
-    return config.get("data_vendors", {}).get(category, "default")
+    """
 
-def route_to_vendor(method: str, *args, **kwargs):
-    """Route method calls to appropriate vendor implementation with fallback support."""
-    category = get_category_for_method(method)
-    vendor_config = get_vendor(category, method)
+    start_date = datetime.strptime(curr_date, "%Y-%m-%d")
+    before = start_date - relativedelta(days=look_back_days)
+    before = before.strftime("%Y-%m-%d")
 
-    # Handle comma-separated vendors
-    primary_vendors = [v.strip() for v in vendor_config.split(',')]
+    result = get_data_in_range(ticker, before, curr_date, "news_data", DATA_DIR)
 
-    if method not in VENDOR_METHODS:
-        raise ValueError(f"Method '{method}' not supported")
+    if len(result) == 0:
+        return ""
 
-    # Get all available vendors for this method for fallback
-    all_available_vendors = list(VENDOR_METHODS[method].keys())
-    
-    # Create fallback vendor list: primary vendors first, then remaining vendors as fallbacks
-    fallback_vendors = primary_vendors.copy()
-    for vendor in all_available_vendors:
-        if vendor not in fallback_vendors:
-            fallback_vendors.append(vendor)
-
-    # Debug: Print fallback ordering
-    primary_str = " → ".join(primary_vendors)
-    fallback_str = " → ".join(fallback_vendors)
-    print(f"DEBUG: {method} - Primary: [{primary_str}] | Full fallback order: [{fallback_str}]")
-
-    # Track results and execution state
-    results = []
-    vendor_attempt_count = 0
-    any_primary_vendor_attempted = False
-    successful_vendor = None
-
-    for vendor in fallback_vendors:
-        if vendor not in VENDOR_METHODS[method]:
-            if vendor in primary_vendors:
-                print(f"INFO: Vendor '{vendor}' not supported for method '{method}', falling back to next vendor")
+    combined_result = ""
+    for day, data in result.items():
+        if len(data) == 0:
             continue
         for entry in data:
             current_news = (
@@ -482,73 +355,64 @@ def get_reddit_global_news(
         if post["content"] == "":
             news_str += f"### {post['title']}\n\n"
         else:
-            vendor_methods = [(vendor_impl, vendor)]
+            news_str += f"### {post['title']}\n\n{post['content']}\n\n"
 
-        # Run methods for this vendor with retry logic
-        vendor_results = []
-        for impl_func, vendor_name in vendor_methods:
-            max_retries = 3
-            base_delay = 1.0
-            last_error = None
+    return f"## Global News Reddit, from {before} to {curr_date}:\n{news_str}"
 
-            for retry_attempt in range(max_retries):
-                try:
-                    if retry_attempt > 0:
-                        print(f"RETRY: Attempt {retry_attempt + 1}/{max_retries} "
-                              f"for {impl_func.__name__}")
-                    else:
-                        print(f"DEBUG: Calling {impl_func.__name__} "
-                              f"from vendor '{vendor_name}'...")
 
-                    result = impl_func(*args, **kwargs)
-                    vendor_results.append(result)
-                    print(f"SUCCESS: {impl_func.__name__} from vendor "
-                          f"'{vendor_name}' completed successfully")
-                    last_error = None
-                    break  # Success, exit retry loop
+def get_reddit_company_news(
+    ticker: Annotated[str, "ticker symbol of the company"],
+    start_date: Annotated[str, "Start date in yyyy-mm-dd format"],
+    look_back_days: Annotated[int, "how many days to look back"],
+    max_limit_per_day: Annotated[int, "Maximum number of news per day"],
+) -> str:
+    """
+    Retrieve the latest top reddit news
+    Args:
+        ticker: ticker symbol of the company
+        start_date: Start date in yyyy-mm-dd format
+        end_date: End date in yyyy-mm-dd format
+    Returns:
+        str: A formatted dataframe containing the latest news articles posts on reddit and meta information in these columns: "created_utc", "id", "title", "selftext", "score", "num_comments", "url"
+    """
 
-                except (AlphaVantageRateLimitError, RateLimitError) as e:
-                    print(f"RATE_LIMIT: {type(e).__name__} exceeded, falling back to next vendor.")
-                    print(f"DEBUG: Rate limit details: {e}")
-                    last_error = e
-                    break  # Don't retry rate limits, move to next vendor
+    start_date = datetime.strptime(start_date, "%Y-%m-%d")
+    before = start_date - relativedelta(days=look_back_days)
+    before = before.strftime("%Y-%m-%d")
 
-                except (ConnectionError, TimeoutError, OSError,
-                        APIConnectionError, APITimeoutError) as e:
-                    # Transient errors - retry with backoff
-                    last_error = e
-                    if retry_attempt < max_retries - 1:
-                        delay = base_delay * (2 ** retry_attempt)
-                        print(f"TRANSIENT_ERROR: {type(e).__name__} - {e}")
-                        print(f"RETRY: Waiting {delay}s before retry...")
-                        time.sleep(delay)
-                    else:
-                        print(f"FAILED: {impl_func.__name__} from vendor "
-                              f"'{vendor_name}' failed after {max_retries} "
-                              f"attempts: {e}")
+    posts = []
+    # iterate from start_date to end_date
+    curr_date = datetime.strptime(before, "%Y-%m-%d")
 
-                except Exception as e:
-                    # Non-transient errors - don't retry
-                    last_error = e
-                    print(f"FAILED: {impl_func.__name__} from vendor "
-                          f"'{vendor_name}' failed: {type(e).__name__}: {e}")
-                    break
+    total_iterations = (start_date - curr_date).days + 1
+    pbar = tqdm(
+        desc=f"Getting Company News for {ticker} on {start_date}",
+        total=total_iterations,
+    )
 
-            if last_error is not None:
-                continue  # Move to next implementation
+    while curr_date <= start_date:
+        curr_date_str = curr_date.strftime("%Y-%m-%d")
+        fetch_result = fetch_top_from_category(
+            "company_news",
+            curr_date_str,
+            max_limit_per_day,
+            ticker,
+            data_path=os.path.join(DATA_DIR, "reddit_data"),
+        )
+        posts.extend(fetch_result)
+        curr_date += relativedelta(days=1)
 
-        # Add this vendor's results
-        if vendor_results:
-            results.extend(vendor_results)
-            successful_vendor = vendor
-            result_summary = f"Got {len(vendor_results)} result(s)"
-            print(f"SUCCESS: Vendor '{vendor}' succeeded - {result_summary}")
-            
-            # Stopping logic: Stop after first successful vendor for single-vendor configs
-            # Multiple vendor configs (comma-separated) may want to collect from multiple sources
-            if len(primary_vendors) == 1:
-                print(f"DEBUG: Stopping after successful vendor '{vendor}' (single-vendor config)")
-                break
+        pbar.update(1)
+
+    pbar.close()
+
+    if len(posts) == 0:
+        return ""
+
+    news_str = ""
+    for post in posts:
+        if post["content"] == "":
+            news_str += f"### {post['title']}\n\n"
         else:
             news_str += f"### {post['title']}\n\n{post['content']}\n\n"
 
