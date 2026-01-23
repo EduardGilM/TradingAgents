@@ -132,6 +132,7 @@ def select_shallow_thinking_agent(provider) -> str:
             ("GPT-4.1-nano - Ultra-lightweight model for basic operations", "gpt-4.1-nano"),
             ("GPT-4.1-mini - Compact model with good performance", "gpt-4.1-mini"),
             ("GPT-4o - Standard model with solid capabilities", "gpt-4o"),
+            ("GPT-5-nano - Next-gen ultra-lightweight model", "gpt-5-nano"),
         ],
         "anthropic": [
             ("Claude Haiku 3.5 - Fast inference and standard capabilities", "claude-3-5-haiku-latest"),
@@ -193,6 +194,7 @@ def select_deep_thinking_agent(provider) -> str:
             ("o3-mini - Advanced reasoning model (lightweight)", "o3-mini"),
             ("o3 - Full advanced reasoning model", "o3"),
             ("o1 - Premier reasoning and problem-solving model", "o1"),
+            ("GPT-5.2 - Advanced reasoning and problem-solving capabilities", "gpt-5.2-2025-12-11"),
         ],
         "anthropic": [
             ("Claude Haiku 3.5 - Fast inference and standard capabilities", "claude-3-5-haiku-latest"),

@@ -367,16 +367,22 @@ def get_reddit_global_news(
             for retry_attempt in range(max_retries):
                 try:
                     if retry_attempt > 0:
-                        print(f"RETRY: Attempt {retry_attempt + 1}/{max_retries} "
-                              f"for {impl_func.__name__}")
+                        print(
+                            f"RETRY: Attempt {retry_attempt + 1}/{max_retries} "
+                            f"for {impl_func.__name__}"
+                        )
                     else:
-                        print(f"DEBUG: Calling {impl_func.__name__} "
-                              f"from vendor '{vendor_name}'...")
+                        print(
+                            f"DEBUG: Calling {impl_func.__name__} "
+                            f"from vendor '{vendor_name}'..."
+                        )
 
                     result = impl_func(*args, **kwargs)
                     vendor_results.append(result)
-                    print(f"SUCCESS: {impl_func.__name__} from vendor "
-                          f"'{vendor_name}' completed successfully")
+                    print(
+                        f"SUCCESS: {impl_func.__name__} from vendor "
+                        f"'{vendor_name}' completed successfully"
+                    )
                     last_error = None
                     break  # Success, exit retry loop
 
@@ -386,25 +392,35 @@ def get_reddit_global_news(
                     last_error = e
                     break  # Don't retry rate limits, move to next vendor
 
-                except (ConnectionError, TimeoutError, OSError,
-                        APIConnectionError, APITimeoutError, RateLimitError) as e:
+                except (
+                    ConnectionError,
+                    TimeoutError,
+                    OSError,
+                    APIConnectionError,
+                    APITimeoutError,
+                    RateLimitError,
+                ) as e:
                     # Transient errors - retry with backoff
                     last_error = e
                     if retry_attempt < max_retries - 1:
-                        delay = base_delay * (2 ** retry_attempt)
+                        delay = base_delay * (2**retry_attempt)
                         print(f"TRANSIENT_ERROR: {type(e).__name__} - {e}")
                         print(f"RETRY: Waiting {delay}s before retry...")
                         time.sleep(delay)
                     else:
-                        print(f"FAILED: {impl_func.__name__} from vendor "
-                              f"'{vendor_name}' failed after {max_retries} "
-                              f"attempts: {e}")
+                        print(
+                            f"FAILED: {impl_func.__name__} from vendor "
+                            f"'{vendor_name}' failed after {max_retries} "
+                            f"attempts: {e}"
+                        )
 
                 except Exception as e:
                     # Non-transient errors - don't retry
                     last_error = e
-                    print(f"FAILED: {impl_func.__name__} from vendor "
-                          f"'{vendor_name}' failed: {type(e).__name__}: {e}")
+                    print(
+                        f"FAILED: {impl_func.__name__} from vendor "
+                        f"'{vendor_name}' failed: {type(e).__name__}: {e}"
+                    )
                     break
 
             if last_error is not None:
@@ -416,11 +432,13 @@ def get_reddit_global_news(
             successful_vendor = vendor
             result_summary = f"Got {len(vendor_results)} result(s)"
             print(f"SUCCESS: Vendor '{vendor}' succeeded - {result_summary}")
-            
+
             # Stopping logic: Stop after first successful vendor for single-vendor configs
             # Multiple vendor configs (comma-separated) may want to collect from multiple sources
             if len(primary_vendors) == 1:
-                print(f"DEBUG: Stopping after successful vendor '{vendor}' (single-vendor config)")
+                print(
+                    f"DEBUG: Stopping after successful vendor '{vendor}' (single-vendor config)"
+                )
                 break
         else:
             news_str += f"### {post['title']}\n\n{post['content']}\n\n"
@@ -437,7 +455,6 @@ def get_stock_stats_indicators_window(
     look_back_days: Annotated[int, "how many days to look back"],
     online: Annotated[bool, "to fetch data online or offline"],
 ) -> str:
-
     best_ind_params = {
         # Moving Averages
         "close_50_sma": (
@@ -572,7 +589,6 @@ def get_stockstats_indicator(
     ],
     online: Annotated[bool, "to fetch data online or offline"],
 ) -> str:
-
     curr_date = datetime.strptime(curr_date, "%Y-%m-%d")
     curr_date = curr_date.strftime("%Y-%m-%d")
 
@@ -639,7 +655,6 @@ def get_YFin_data_online(
     start_date: Annotated[str, "Start date in yyyy-mm-dd format"],
     end_date: Annotated[str, "End date in yyyy-mm-dd format"],
 ):
-
     datetime.strptime(start_date, "%Y-%m-%d")
     datetime.strptime(end_date, "%Y-%m-%d")
 
@@ -743,7 +758,7 @@ def get_stock_news_openai(ticker, curr_date):
         store=True,
     )
 
-    return response.output[1].content[0].text
+    return response.output_text
 
 
 def get_global_news_openai(curr_date):
@@ -778,7 +793,7 @@ def get_global_news_openai(curr_date):
         store=True,
     )
 
-    return response.output[1].content[0].text
+    return response.output_text
 
 
 def get_fundamentals_openai(ticker, curr_date):
@@ -813,4 +828,4 @@ def get_fundamentals_openai(ticker, curr_date):
         store=True,
     )
 
-    return response.output[1].content[0].text
+    return response.output_text
